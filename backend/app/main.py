@@ -67,6 +67,20 @@ def health_db():
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
-        return {"db": "ok", "kind": engine.dialect.name}
+        # Admin holati (faqat ha/yo'q; parol va email ko'rsatilmaydi).
+        from sqlalchemy import select
+        from .models import ROLE_ADMIN, User
+        from .security import verify_password
+        with SessionLocal() as db:
+            admins = list(db.scalars(select(User).where(User.role == ROLE_ADMIN)))
+            admin = admins[0] if admins else None
+            return {
+                "db": "ok", "kind": engine.dialect.name,
+                "admin_count": len(admins),
+                "env_password_set": bool(settings.ADMIN_PASSWORD),
+                "admin_email_matches_env": bool(admin and admin.email == settings.ADMIN_EMAIL),
+                "admin_password_matches_env": bool(
+                    admin and settings.ADMIN_PASSWORD and verify_password(settings.ADMIN_PASSWORD, admin.password_hash)),
+            }
     except Exception as e:
         return JSONResponse(status_code=500, content={"db": "xato", "kind": engine.dialect.name, "error": str(e).splitlines()[0][:300]})
