@@ -1,8 +1,8 @@
-node_modules
-dist
-.venv
-__pycache__
+node_modules/
+dist/
+.venv/
+__pycache__/
 *.pyc
 *.db
 .env
-.vercel
+.vercel/

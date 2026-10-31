@@ -9,16 +9,21 @@ from fastapi.responses import JSONResponse
 from . import models  # noqa: F401  (jadvallar Base'ga ro'yxatdan o'tishi uchun)
 from .config import settings
 from .database import Base, SessionLocal, engine
-from .services.bootstrap import ensure_admin
+from .services.bootstrap import ensure_admin, init_db
 from .routers import admin, auth, director, evaluations, student, teacher
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    if settings.AUTO_CREATE_TABLES:
-        Base.metadata.create_all(bind=engine)
-    with SessionLocal() as db:
-        generated = ensure_admin(db)
+    generated = None
+    try:
+        if settings.AUTO_CREATE_TABLES:
+            init_db(engine, Base)
+        with SessionLocal() as db:
+            generated = ensure_admin(db)
+    except Exception:  # baza ulanmasa ham ilova ishga tushsin; xato /api/health/db da ko'rinadi
+        import traceback
+        traceback.print_exc()
     if generated:
         print("=" * 60)
         print(f"SUPER ADMIN yaratildi: {settings.ADMIN_EMAIL}")
@@ -53,3 +58,15 @@ for r in (auth, student, teacher, director, admin, evaluations):
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/health/db")
+def health_db():
+    """Baza ulanishini tekshiradi (xato matnini ko'rsatadi, parolni emas)."""
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return {"db": "ok", "kind": engine.dialect.name}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"db": "xato", "kind": engine.dialect.name, "error": str(e).splitlines()[0][:300]})

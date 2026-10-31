@@ -12,7 +12,6 @@ from app.database import Base, SessionLocal, engine
 from app.security import hash_password
 from app.services.evaluation_service import new_anon_code, now_period
 from app.services.bootstrap import ensure_admin
-from app.services.license_service import generate_key
 
 random.seed(7)
 
@@ -53,18 +52,13 @@ def main() -> None:
     db.add_all(qs)
     db.flush()
 
-    plans = ["premium", "standard", "basic"]
     teacher_no = 0
     for si in range(3):
         n = si + 1
-        # 1-2-maktab: faol litsenziya; 3-maktab: litsenziyasiz (faollashtirishni sinash uchun)
-        lic = None
-        if si < 2:
-            lic = m.License(key=generate_key(), school_name=f"{n}-sonli maktab", plan=plans[si], is_active=True,
-                            activated_at=now, expires_at=now + timedelta(days=365))
-            db.add(lic)
-            db.flush()
-        school = m.School(name=f"{n}-sonli maktab", license_id=lic.id if lic else None)
+        # 1-2-maktab: ruxsat ochiq; 3-maktab: yopiq (ruxsat berishni sinash uchun)
+        school = m.School(name=f"{n}-sonli maktab", access_enabled=si < 2,
+                          access_until=(now + timedelta(days=365)) if si == 0 else None,
+                          paid_amount=[1_000_000, 500_000, None][si])
         db.add(school)
         db.flush()
 
@@ -124,7 +118,6 @@ def main() -> None:
             db.add(m.Evaluation(teacher_id=t.id, student_id=s.id, month=month, year=year, scores=scores))
             db.add(m.StudentVote(student_id=s.id, month=month, year=year))
 
-    db.add(m.License(key="DEMO-0000-FREE-KEY1", plan="basic", duration_days=365))  # faollashtirish uchun bo'sh kalit
     db.commit()
     admin_password = ensure_admin(db)  # super admin: tasodifiy murakkab parol
     db.close()

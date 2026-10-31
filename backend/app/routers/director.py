@@ -14,15 +14,12 @@ from ..database import get_db
 from ..deps import require_role
 from ..models import (ROLE_DIRECTOR, ROLE_STUDENT, ROLE_TEACHER, Evaluation, EvaluationComment, Question,
                       School, Student, StudentVote, Teacher, User)
-from ..schemas import LicenseActivateIn, PersonCreate, PersonUpdate, QuestionsIn
+from ..schemas import PersonCreate, PersonUpdate, QuestionsIn
 from ..security import hash_password
 from ..services import evaluation_service as svc
-from ..services.license_service import activate_license, license_info, school_license
 
 router = APIRouter(prefix="/director", tags=["director"])
 director_only = require_role(ROLE_DIRECTOR)
-# Litsenziya hali faol bo'lmasa ham direktor uni faollashtira olishi kerak.
-director_no_license = require_role(ROLE_DIRECTOR, check_license=False)
 
 MONTHS_UZ = ["", "yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul", "avgust", "sentabr", "oktabr",
              "noyabr", "dekabr"]
@@ -97,7 +94,6 @@ def overview(user: User = Depends(director_only), db: Session = Depends(get_db))
         "teachers_count": len(teachers), "students_count": students_count, "voted_count": voted,
         "participation": round(voted / students_count * 100) if students_count else 0,
         "overall_avg": svc.overall_avg(evals), "year": year, "month": month, "month_name": MONTHS_UZ[month],
-        "license": license_info(school_license(db, user.school_id)),
     }
 
 
@@ -282,17 +278,3 @@ def put_questions(data: QuestionsIn, user: User = Depends(director_only), db: Se
             q.is_active = False
     db.commit()
     return get_questions(user, db)
-
-
-# ---------------------------------------------------------------- litsenziya
-@router.get("/license")
-def get_license(user: User = Depends(director_no_license), db: Session = Depends(get_db)):
-    return license_info(school_license(db, user.school_id))
-
-
-@router.post("/license/activate")
-def license_activate(data: LicenseActivateIn, user: User = Depends(director_no_license),
-                     db: Session = Depends(get_db)):
-    school = db.get(School, user.school_id)
-    lic = activate_license(db, school, data.key)
-    return license_info(lic)

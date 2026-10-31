@@ -1,6 +1,5 @@
-"""Super admin endpoint'lari: maktablar, litsenziyalar, statistika."""
+"""Super admin endpoint'lari: maktablar (ruxsat ochish/yopish, o'chirish), direktorlar, statistika."""
 import secrets
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
@@ -8,22 +7,23 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..deps import require_role
-from ..models import ROLE_ADMIN, ROLE_DIRECTOR, License, School, Student, Teacher, User
-from ..schemas import DirectorCreate, LicenseCreate, SchoolCreate
+from ..models import ROLE_ADMIN, ROLE_DIRECTOR, School, Student, Teacher, User
+from ..schemas import AccessIn, DirectorCreate, SchoolCreate
 from ..security import hash_password
-from ..services.license_service import PLAN_PRICES, PLANS, generate_key, license_info, license_status
+from ..services.access import access_info, access_status, apply_access, delete_school
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 admin_only = require_role(ROLE_ADMIN)
 
 
 def _school_row(db: Session, s: School) -> dict:
-    lic: Optional[License] = db.get(License, s.license_id) if s.license_id else None
+    directors = db.scalars(select(User).where(User.role == ROLE_DIRECTOR, User.school_id == s.id).order_by(User.full_name))
     return {
         "id": s.id, "name": s.name,
         "teachers_count": db.scalar(select(func.count(Teacher.id)).where(Teacher.school_id == s.id)) or 0,
         "students_count": db.scalar(select(func.count(Student.id)).where(Student.school_id == s.id)) or 0,
-        "license": license_info(lic, with_key=True),
+        "directors": [{"full_name": d.full_name, "email": d.email} for d in directors],
+        "access": access_info(s),
     }
 
 
@@ -34,71 +34,46 @@ def schools(_: User = Depends(admin_only), db: Session = Depends(get_db)):
 
 @router.post("/schools", status_code=201)
 def create_school(data: SchoolCreate, _: User = Depends(admin_only), db: Session = Depends(get_db)):
-    if data.license_id is not None:
-        lic = db.get(License, data.license_id)
-        if not lic:
-            raise HTTPException(404, "Litsenziya topilmadi")
-        if db.scalar(select(School.id).where(School.license_id == lic.id)):
-            raise HTTPException(409, "Bu litsenziya boshqa maktabga biriktirilgan")
-    school = School(name=data.name.strip(), license_id=data.license_id)
+    """Maktabni faqat super admin qo'shadi. Odatda yopiq turadi: pul to'langach ruxsat beriladi."""
+    school = School(name=data.name.strip())
+    apply_access(school, data.open, data.days, data.paid_amount)
     db.add(school)
-    db.flush()
-    password = None
-    if data.director_email:  # maktab bilan birga direktor hisobini ham ochish mumkin
-        email = data.director_email.strip().lower()
-        if db.scalar(select(User.id).where(func.lower(User.email) == email)):
-            raise HTTPException(409, "Bu email band")
-        password = data.director_password or "".join(secrets.choice("abcdefghjkmnpqrstuvwxyz23456789") for _ in range(8))
-        db.add(User(full_name=data.director_name or "Direktor", email=email, role=ROLE_DIRECTOR,
-                    school_id=school.id, password_hash=hash_password(password)))
     db.commit()
-    return {"school": _school_row(db, school), "director_email": data.director_email, "director_password": password}
+    return _school_row(db, school)
 
 
-@router.get("/licenses")
-def licenses(_: User = Depends(admin_only), db: Session = Depends(get_db)):
-    out = []
-    for lic in db.scalars(select(License).order_by(License.id.desc())):
-        school = db.scalar(select(School).where(School.license_id == lic.id))
-        out.append({**license_info(lic, with_key=True), "duration_days": lic.duration_days,
-                    "school_name": school.name if school else None})
-    return out
-
-
-@router.post("/licenses", status_code=201)
-def create_license(data: LicenseCreate, _: User = Depends(admin_only), db: Session = Depends(get_db)):
-    if data.plan not in PLANS:
-        raise HTTPException(400, f"Tarif quyidagilardan biri bo'lishi kerak: {', '.join(PLANS)}")
-    school = None
-    if data.school_id is not None:
-        school = db.get(School, data.school_id)
-        if not school:
-            raise HTTPException(404, "Maktab topilmadi")
-        if school.license_id:
-            raise HTTPException(409, "Bu maktabda allaqachon litsenziya bor")
-    lic = License(key=generate_key(), plan=data.plan, duration_days=data.duration_days,
-                  school_name=school.name if school else None)
-    db.add(lic)
-    db.flush()
-    if school:
-        school.license_id = lic.id
+@router.put("/schools/{school_id}/access")
+def set_access(school_id: int, data: AccessIn, _: User = Depends(admin_only), db: Session = Depends(get_db)):
+    """Maktabga ruxsat berish (muddat bilan yoki muddatsiz) yoki yopish."""
+    school = db.get(School, school_id)
+    if not school:
+        raise HTTPException(404, "Maktab topilmadi")
+    apply_access(school, data.enabled, data.days, data.paid_amount)
     db.commit()
-    return {**license_info(lic, with_key=True), "duration_days": lic.duration_days}
+    return _school_row(db, school)
+
+
+@router.delete("/schools/{school_id}", status_code=204)
+def remove_school(school_id: int, _: User = Depends(admin_only), db: Session = Depends(get_db)):
+    """Maktabni va uning direktor, o'qituvchi, o'quvchi, baho, izohlarini butunlay o'chiradi."""
+    school = db.get(School, school_id)
+    if not school:
+        raise HTTPException(404, "Maktab topilmadi")
+    delete_school(db, school)
 
 
 @router.get("/stats")
 def stats(_: User = Depends(admin_only), db: Session = Depends(get_db)):
-    all_licenses = list(db.scalars(select(License)))
-    # Tushum: faollashtirilgan (to'langan) litsenziyalar tarif narxlari yig'indisi.
-    paid = [lic for lic in all_licenses if lic.activated_at is not None]
+    all_schools = list(db.scalars(select(School)))
+    open_count = sum(1 for s in all_schools if access_status(s) == "active")
     return {
-        "schools_count": db.scalar(select(func.count(School.id))) or 0,
+        "schools_count": len(all_schools),
+        "open_schools": open_count,
+        "closed_schools": len(all_schools) - open_count,
         "directors_count": db.scalar(select(func.count(User.id)).where(User.role == ROLE_DIRECTOR)) or 0,
         "teachers_count": db.scalar(select(func.count(Teacher.id))) or 0,
         "students_count": db.scalar(select(func.count(Student.id))) or 0,
-        "licenses_total": len(all_licenses),
-        "active_licenses": sum(1 for lic in all_licenses if license_status(lic) == "active"),
-        "revenue": sum(PLAN_PRICES.get(lic.plan, 0) for lic in paid),
+        "revenue": sum(s.paid_amount or 0 for s in all_schools),
         "currency": "UZS",
     }
 

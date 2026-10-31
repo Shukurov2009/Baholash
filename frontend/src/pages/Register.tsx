@@ -94,10 +94,15 @@ export default function Register() {
             ) : (
               <Input label="Fan (masalan: Matematika)" value={form.subject} onChange={(e) => set("subject")(e.target.value)} required />
             )}
-            <Input label="O'zingiz o'ylagan login (lotin harflarida)" value={form.username} onChange={(e) => set("username")(e.target.value)} required autoComplete="username" autoCapitalize="none" />
+            <Input label="O'zingiz o'ylagan login (lotin harflari va raqam, @ bo'lmasin)" placeholder="masalan: fayzullo83" value={form.username} onChange={(e) => set("username")(e.target.value)} required autoComplete="username" autoCapitalize="none" />
             <Input label="Parol (kamida 6 belgi)" type="password" value={form.password} onChange={(e) => set("password")(e.target.value)} required minLength={6} maxLength={72} autoComplete="new-password" />
             <Input label="Parolni takrorlang" type="password" value={form.password2} onChange={(e) => set("password2")(e.target.value)} required autoComplete="new-password" />
             {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{error}</p>}
+            {schools.length === 0 && !error && (
+              <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                Hozircha maktablar qo'shilmagan. Avval super admin maktab qo'shishi kerak.
+              </p>
+            )}
             <Button type="submit" className="w-full" disabled={busy || schools.length === 0}>{busy ? t("loading") : "Ro'yxatdan o'tish"}</Button>
             <p className="text-center text-xs text-slate-500">Login va parolni eslab qoling: keyingi safar shular bilan kirasiz.</p>
           </form>

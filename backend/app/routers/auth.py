@@ -6,8 +6,9 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..deps import get_current_user
-from ..models import ROLE_STUDENT, ROLE_TEACHER, School, Student, Teacher, User
+from ..models import ROLE_ADMIN, ROLE_STUDENT, ROLE_TEACHER, School, Student, Teacher, User
 from ..schemas import ChangePasswordIn, LoginIn, RegisterIn, TokenOut, UserOut
+from ..services.access import CLOSED_MESSAGE, access_status
 from ..security import create_access_token, hash_password, verify_password
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -32,13 +33,16 @@ def login(data: LoginIn, db: Session = Depends(get_db)):
         raise HTTPException(401, "Login yoki parol noto'g'ri")
     if data.role and data.role != user.role:
         raise HTTPException(401, "Login yoki parol noto'g'ri")
+    if user.role != ROLE_ADMIN and access_status(db.get(School, user.school_id) if user.school_id else None) != "active":
+        raise HTTPException(403, CLOSED_MESSAGE)
     return TokenOut(token=create_access_token(user.id, user.role), user=user_out(db, user))
 
 
 @router.get("/schools")
 def public_schools(db: Session = Depends(get_db)):
-    """Ro'yxatdan o'tish sahifasi uchun ochiq ro'yxat (faqat id va nom)."""
-    return [{"id": s.id, "name": s.name} for s in db.scalars(select(School).order_by(School.name))]
+    """Ro'yxatdan o'tish sahifasi uchun ochiq ro'yxat (faqat id va nom). Faqat ruxsat berilgan maktablar."""
+    return [{"id": s.id, "name": s.name} for s in db.scalars(select(School).order_by(School.name))
+            if access_status(s) == "active"]
 
 
 @router.post("/register", response_model=TokenOut, status_code=201)
@@ -50,6 +54,8 @@ def register(data: RegisterIn, db: Session = Depends(get_db)):
     school = db.get(School, data.school_id)
     if not school:
         raise HTTPException(404, "Maktab topilmadi")
+    if access_status(school) != "active":
+        raise HTTPException(403, "Bu maktabga hozircha ruxsat berilmagan")
     if len(data.password.encode("utf-8")) > 72:  # bcrypt chegarasi (belgi emas, bayt)
         raise HTTPException(400, "Parol juda uzun")
     username = data.username.strip().lower()

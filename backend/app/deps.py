@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .database import get_db
 from .models import ROLE_ADMIN, User
-from .services.license_service import ensure_school_license_active
+from .services.access import ensure_school_open
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -41,14 +41,14 @@ def decode_or_401(token: str) -> dict:
         raise HTTPException(401, "Token yaroqsiz")
 
 
-def require_role(*roles: str, check_license: bool = True):
-    """Rolni tekshiradi (403). Maktab foydalanuvchilari uchun litsenziya ham tekshiriladi."""
+def require_role(*roles: str):
+    """Rolni tekshiradi (403). Maktab foydalanuvchilari uchun maktabga ruxsat (ochiq/yopiq) ham tekshiriladi."""
 
     def checker(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
         if user.role not in roles:
             raise HTTPException(403, "Bu amal uchun ruxsat yo'q")
-        if check_license and settings.LICENSE_REQUIRED and user.role != ROLE_ADMIN:
-            ensure_school_license_active(db, user.school_id)
+        if user.role != ROLE_ADMIN:
+            ensure_school_open(db, user.school_id)
         return user
 
     return checker

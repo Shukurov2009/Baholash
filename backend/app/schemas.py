@@ -62,22 +62,17 @@ class QuestionsIn(BaseModel):
     questions: list[QuestionItem] = Field(max_length=20)
 
 
-class LicenseActivateIn(BaseModel):
-    key: str = Field(min_length=8)
-
-
 class SchoolCreate(BaseModel):
     name: str = Field(min_length=2, max_length=200)
-    license_id: Optional[int] = None
-    director_name: Optional[str] = None
-    director_email: Optional[str] = None
-    director_password: Optional[str] = Field(default=None, min_length=6, max_length=72)
+    open: bool = False  # darrov ruxsat berilsinmi
+    days: Optional[int] = Field(default=None, ge=1, le=3650)  # bo'sh = muddatsiz
+    paid_amount: Optional[int] = Field(default=None, ge=0, le=10_000_000_000)
 
 
-class LicenseCreate(BaseModel):
-    plan: str = "basic"
-    duration_days: int = Field(default=365, ge=1, le=3650)
-    school_id: Optional[int] = None
+class AccessIn(BaseModel):
+    enabled: bool
+    days: Optional[int] = Field(default=None, ge=1, le=3650)  # enabled bo'lsa: bo'sh = muddatsiz
+    paid_amount: Optional[int] = Field(default=None, ge=0, le=10_000_000_000)  # shu safar to'langan summa
 
 
 class RegisterIn(BaseModel):

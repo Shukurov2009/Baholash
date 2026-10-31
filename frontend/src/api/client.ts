@@ -19,8 +19,12 @@ export function setToken(token: string | null) {
   }
 }
 
+// Kompyuterda (npm run dev) backend alohida portda: localhost:8000.
+// Internetda (Vercel) backend shu saytning o'zida turadi, shuning uchun manzil nisbiy: "/api".
+const API_ORIGIN = import.meta.env.DEV ? (import.meta.env.VITE_API_URL ?? "http://localhost:8000") : "";
+
 export const api = axios.create({
-  baseURL: `${import.meta.env.VITE_API_URL ?? "http://localhost:8000"}/api`,
+  baseURL: `${API_ORIGIN}/api`,
 });
 
 api.interceptors.request.use((config) => {
@@ -33,9 +37,16 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (r) => r,
   (error: AxiosError) => {
-    if (error.response?.status === 401 && !error.config?.url?.includes("/auth/login")) {
+    const url = error.config?.url ?? "";
+    if (error.response?.status === 401 && !url.includes("/auth/login")) {
       setToken(null);
       window.location.href = "/";
+    }
+    // Super admin maktabga ruxsatni yopgan bo'lsa — chiqarib, sababini bosh sahifada ko'rsatamiz.
+    const detail = (error.response?.data as { detail?: unknown } | undefined)?.detail;
+    if (error.response?.status === 403 && typeof detail === "string" && detail.startsWith("Maktabingizga") && !url.includes("/auth/login")) {
+      setToken(null);
+      window.location.href = "/?closed=1";
     }
     return Promise.reject(error);
   },

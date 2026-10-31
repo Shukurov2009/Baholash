@@ -27,7 +27,6 @@ const uz = {
   teachers: "O'qituvchilar",
   students: "O'quvchilar",
   questions: "Savollar",
-  license: "Litsenziya",
   settings: "Sozlamalar",
   dashboard: "Bosh sahifa",
   schools: "Maktablar",

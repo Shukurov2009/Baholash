@@ -24,26 +24,15 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-class License(Base):
-    __tablename__ = "licenses"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    key: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    school_name: Mapped[Optional[str]] = mapped_column(String(200))
-    plan: Mapped[str] = mapped_column(String(30), default="basic")
-    duration_days: Mapped[int] = mapped_column(Integer, default=365)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=False)
-    activated_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
-
-
 class School(Base):
     __tablename__ = "schools"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(200))
-    license_id: Mapped[Optional[int]] = mapped_column(ForeignKey("licenses.id"), unique=True)
+    # Ruxsat: super admin maktabga ochib beradi. Yopiq bo'lsa, maktab foydalanuvchilari kira olmaydi.
+    access_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    access_until: Mapped[Optional[datetime]] = mapped_column(DateTime)  # bo'sh = muddatsiz
+    paid_amount: Mapped[Optional[int]] = mapped_column(Integer)  # jami to'langan summa (so'm)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 

@@ -11,17 +11,6 @@ export interface User {
 }
 
 export type Status = "good" | "average" | "critical" | "no_data";
-export type LicenseStatus = "none" | "inactive" | "active" | "expired";
-
-export interface LicenseInfo {
-  status: LicenseStatus;
-  plan: string | null;
-  expires_at: string | null;
-  activated_at: string | null;
-  key?: string;
-  id?: number;
-}
-
 export interface Question {
   id: number;
   text: string;
@@ -88,7 +77,6 @@ export interface Overview {
   year: number;
   month: number;
   month_name: string;
-  license: LicenseInfo;
 }
 
 export interface AlertRow {
@@ -116,24 +104,32 @@ export interface StudentRow {
   grade: number | null;
 }
 
+export type AccessStatus = "active" | "expired" | "off";
+
 export interface AdminSchool {
   id: number;
   name: string;
   teachers_count: number;
   students_count: number;
-  license: LicenseInfo;
-}
-
-export interface AdminLicense extends LicenseInfo {
-  duration_days: number;
-  school_name: string | null;
+  directors: { full_name: string; email: string }[];
+  access: {
+    status: AccessStatus;
+    enabled: boolean;
+    until: string | null;
+    days_left: number | null;
+    paid_amount: number;
+  };
 }
 
 export interface AdminStats {
   schools_count: number;
+  open_schools: number;
+  closed_schools: number;
   directors_count: number;
   teachers_count: number;
   students_count: number;
+  revenue: number;
+  currency: string;
 }
 
 export interface AdminDirector {
