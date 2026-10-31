@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..models import ROLE_ADMIN, User
-from ..security import hash_password
+from ..security import hash_password, verify_password
 from sqlalchemy import select
 
 
@@ -36,7 +36,20 @@ def init_db(engine, base) -> None:
 
 def ensure_admin(db: Session) -> Optional[str]:
     """Super admin yo'q bo'lsa yaratadi. Parol tasodifiy yaratilgan bo'lsa — uni qaytaradi (bir marta ko'rsatish uchun)."""
-    if db.scalar(select(User.id).where(User.role == ROLE_ADMIN)):
+    admin = db.scalar(select(User).where(User.role == ROLE_ADMIN))
+    if admin:
+        # ADMIN_PASSWORD / ADMIN_EMAIL berilgan bo'lsa, ular "haqiqat manbai": admin hisobini shunga moslaymiz.
+        changed = False
+        if settings.ADMIN_PASSWORD and not verify_password(settings.ADMIN_PASSWORD, admin.password_hash):
+            admin.password_hash = hash_password(settings.ADMIN_PASSWORD)
+            changed = True
+        if admin.email != settings.ADMIN_EMAIL:
+            taken = db.scalar(select(User.id).where(User.email == settings.ADMIN_EMAIL, User.id != admin.id))
+            if not taken:
+                admin.email = settings.ADMIN_EMAIL
+                changed = True
+        if changed:
+            db.commit()
         return None
     generated = None
     password = settings.ADMIN_PASSWORD
